@@ -707,9 +707,9 @@ A snapshot strategy for comparing views based on a recursive description of thei
 
     A view size override.
 
-  - `traits: UITraitCollection = .init()`
+  - `traits: UITraitCollection? = nil`
 
-    A trait collection override.
+    A trait collection override. If not specified, will default to the `ViewImageConfig` traits.
 
 #### Example
 
@@ -844,9 +844,9 @@ A snapshot strategy for comparing view controller views based on a recursive des
 
     A view size override.
     
-  - `traits: UITraitCollection = .init()`
+  - `traits: UITraitCollection? = nil`
 
-    A trait collection override.
+    A trait collection override. If not specified, will default to the `ViewImageConfig` traits.
 
 #### Example
 

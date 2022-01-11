@@ -13,20 +13,20 @@ extension Snapshotting where Value == UIViewController, Format == UIImage {
   ///   - config: A set of device configuration settings.
   ///   - precision: The percentage of pixels that must match.
   ///   - size: A view size override.
-  ///   - traits: A trait collection override.
+  ///   - traits: A trait collection override. If not specified, will default to the `ViewImageConfig` traits
   public static func image(
     on config: ViewImageConfig,
     precision: Float = 1,
     size: CGSize? = nil,
-    traits: UITraitCollection = .init()
+    traits: UITraitCollection? = nil
     )
     -> Snapshotting {
-
-      return SimplySnapshotting.image(precision: precision, scale: traits.displayScale).asyncPullback { viewController in
+      var desiredTraits = traits ?? config.traits
+      return SimplySnapshotting.image(precision: precision, scale: desiredTraits.displayScale).asyncPullback { viewController in
         snapshotView(
-          config: size.map { .init(safeArea: config.safeArea, size: $0, traits: config.traits) } ?? config,
+          config: size.map { .init(safeArea: config.safeArea, size: $0, traits: desiredTraits) } ?? config,
           drawHierarchyInKeyWindow: false,
-          traits: traits,
+          traits: desiredTraits,
           view: viewController.view,
           viewController: viewController
         )
@@ -47,7 +47,6 @@ extension Snapshotting where Value == UIViewController, Format == UIImage {
     traits: UITraitCollection = .init()
     )
     -> Snapshotting {
-
       return SimplySnapshotting.image(precision: precision, scale: traits.displayScale).asyncPullback { viewController in
         snapshotView(
           config: .init(safeArea: .zero, size: size, traits: traits),
@@ -88,18 +87,19 @@ extension Snapshotting where Value == UIViewController, Format == String {
   /// - Parameters:
   ///   - config: A set of device configuration settings.
   ///   - size: A view size override.
-  ///   - traits: A trait collection override.
+  ///   - traits: A trait collection override. If not specified, will default to the `ViewImageConfig` traits
   public static func recursiveDescription(
     on config: ViewImageConfig = .init(),
     size: CGSize? = nil,
     traits: UITraitCollection = .init()
     )
     -> Snapshotting<UIViewController, String> {
+      var desiredTraits = traits ?? config.traits
       return SimplySnapshotting.lines.pullback { viewController in
         let dispose = prepareView(
-          config: .init(safeArea: config.safeArea, size: size ?? config.size, traits: config.traits),
+          config: .init(safeArea: config.safeArea, size: size ?? config.size, traits: desiredTraits),
           drawHierarchyInKeyWindow: false,
-          traits: traits,
+          traits: desiredTraits,
           view: viewController.view,
           viewController: viewController
         )
