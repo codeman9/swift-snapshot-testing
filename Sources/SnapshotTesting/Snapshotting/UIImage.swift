@@ -1,6 +1,7 @@
 #if os(iOS) || os(tvOS)
 import UIKit
 import XCTest
+import simd
 
 extension Diffing where Value == UIImage {
   /// A pixel-diffing strategy for UIImage's which requires a 100% match.
@@ -20,7 +21,12 @@ extension Diffing where Value == UIImage {
     }
 
     return Diffing(
-      toData: { $0.pngData() ?? emptyImage().pngData()! },
+      toData: { image in
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.extendedSRGB) else {
+          return emptyImage().pngData()!
+        }
+        return image.pngData(colorSpace: colorSpace) ?? emptyImage().pngData()!
+      },
       fromData: { UIImage(data: $0, scale: imageScale)! }
     ) { old, new in
       guard !compare(old, new, precision: precision) else { return nil }
