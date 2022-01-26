@@ -1,6 +1,32 @@
 #if os(macOS)
 import Cocoa
+import ImageIO
 import XCTest
+
+extension NSImage {
+  func imageData() -> Data? {
+    let data = NSMutableData()
+    var imageRect = CGRect(x: 0, y: 0, width: self.size.width, height: self.size.height)
+    guard let cgImage = self.cgImage(forProposedRect: &imageRect, context: nil, hints: nil),
+      let destination = CGImageDestinationCreateWithData(data, "public.tiff" as CFString, 1, nil)
+    else {
+      return nil
+    }
+
+    let options: NSDictionary = [
+      kCGImageDestinationLossyCompressionQuality: 1.0, // lossless
+      kCGImagePropertyTIFFCompression: 5, // LZW
+      kCGImagePropertyIsFloat: true,
+      kCGImagePropertyDepth: cgImage.bitsPerPixel,
+    ]
+    CGImageDestinationAddImage(destination, cgImage, options)
+    guard CGImageDestinationFinalize(destination) else {
+      return nil
+    }
+
+    return (data as Data?)
+  }
+}
 
 extension Diffing where Value == NSImage {
   /// A pixel-diffing strategy for NSImage's which requires a 100% match.
@@ -12,7 +38,7 @@ extension Diffing where Value == NSImage {
   /// - Returns: A new diffing strategy.
   public static func image(precision: Float) -> Diffing {
     return .init(
-      toData: { NSImagePNGRepresentation($0)! },
+      toData: { $0.imageData()! },
       fromData: { NSImage(data: $0)! }
     ) { old, new in
       guard !compare(old, new, precision: precision) else { return nil }
@@ -39,7 +65,7 @@ extension Snapshotting where Value == NSImage, Format == NSImage {
   /// - Parameter precision: The percentage of pixels that must match.
   public static func image(precision: Float) -> Snapshotting {
     return .init(
-      pathExtension: "png",
+      pathExtension: "tiff",
       diffing: .image(precision: precision)
     )
   }
@@ -90,6 +116,11 @@ private func compare(_ old: NSImage, _ new: NSImage, precision: Float) -> Bool {
 }
 
 private func context(for cgImage: CGImage) -> CGContext? {
+  var bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+  if cgImage.bitsPerPixel == 64 {
+    bitmapInfo |= CGBitmapInfo.floatComponents.rawValue
+    bitmapInfo |= CGBitmapInfo.byteOrder16Little.rawValue
+  }
   guard
     let space = cgImage.colorSpace,
     let context = CGContext(
@@ -99,7 +130,7 @@ private func context(for cgImage: CGImage) -> CGContext? {
       bitsPerComponent: cgImage.bitsPerComponent,
       bytesPerRow: cgImage.bytesPerRow,
       space: space,
-      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+      bitmapInfo: bitmapInfo
     )
     else { return nil }
 
