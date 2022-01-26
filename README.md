@@ -7,7 +7,7 @@
 Delightful Swift snapshot testing.
 
 <!--
-![An example of a snapshot failure in Xcode.](.github/snapshot-test-1.png)
+![An example of a snapshot failure in Xcode.](.github/snapshot-test-1.tiff)
 -->
 
 ## Usage
@@ -31,7 +31,7 @@ When an assertion first runs, a snapshot is automatically recorded to disk and t
 
 > 🛑 failed - No reference was found on disk. Automatically recorded snapshot: …
 >
-> open "…/MyAppTests/\_\_Snapshots\_\_/MyViewControllerTests/testMyViewController.png"
+> open "…/MyAppTests/\_\_Snapshots\_\_/MyViewControllerTests/testMyViewController.tiff"
 >
 > Re-run "testMyViewController" to test against the newly-recorded snapshot.
 
