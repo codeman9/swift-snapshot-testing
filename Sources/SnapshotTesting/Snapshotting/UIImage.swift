@@ -26,8 +26,8 @@ extension Diffing where Value == UIImage {
       guard !compare(old, new, precision: precision) else { return nil }
       let difference = SnapshotTesting.diff(old, new)
       let message = new.size == old.size
-        ? "Newly-taken snapshot does not match reference."
-        : "Newly-taken snapshot@\(new.size) does not match reference@\(old.size)."
+      ? "Newly-taken snapshot does not match reference."
+      : "Newly-taken snapshot@\(new.size) does not match reference@\(old.size)."
       let oldAttachment = XCTAttachment(image: old)
       oldAttachment.name = "reference"
       let newAttachment = XCTAttachment(image: new)
@@ -40,8 +40,48 @@ extension Diffing where Value == UIImage {
       )
     }
   }
-  
-  
+
+  /// A pixel-diffing strategy for UIImage's which requires a 100% match using HEIC.
+  public static let imageHEIC = Diffing.imageHEIC(precision: 1, scale: nil, quality: 1.0)
+
+  /// A pixel-diffing strategy for UIImage using HEIC that allows customizing how precise the matching must be.
+  ///
+  /// - Parameter precision: A value between 0 and 1, where 1 means the images must match 100% of their pixels.
+  /// - Parameter scale: Scale to use when loading the reference image from disk. If `nil` or the `UITraitCollection`s default value of `0.0`, the screens scale is used.
+  /// - Parameter quality: Compression quality: 1.0 == lossless, 0.0 == maximum compression
+  /// - Returns: A new diffing strategy.
+  public static func imageHEIC(precision: Float, scale: CGFloat?, quality: CGFloat = 1.0) -> Diffing {
+    let imageScale: CGFloat
+    if let scale = scale, scale != 0.0 {
+      imageScale = scale
+    } else {
+      imageScale = UIScreen.main.scale
+    }
+
+    return Diffing(
+      toData: {
+        return $0.heicData(quality: quality) ?? emptyImage().heicData(quality: quality)!
+      },
+      fromData: { UIImage(data: $0, scale: imageScale)! }
+    ) { old, new in
+      guard !compareHEIC(old, new, precision: precision, quality: quality) else { return nil }
+      let difference = SnapshotTesting.diff(old, new)
+      let message = new.size == old.size
+      ? "Newly-taken snapshot does not match reference."
+      : "Newly-taken snapshot@\(new.size) does not match reference@\(old.size)."
+      let oldAttachment = XCTAttachment(image: old)
+      oldAttachment.name = "reference"
+      let newAttachment = XCTAttachment(image: new)
+      newAttachment.name = "failure"
+      let differenceAttachment = XCTAttachment(image: difference)
+      differenceAttachment.name = "difference"
+      return (
+        message,
+        [oldAttachment, newAttachment, differenceAttachment]
+      )
+    }
+  }
+
   /// Used when the image size has no width or no height to generated the default empty image
   private static func emptyImage() -> UIImage {
     let label = UILabel(frame: CGRect(x: 0, y: 0, width: 400, height: 80))
@@ -67,6 +107,23 @@ extension Snapshotting where Value == UIImage, Format == UIImage {
     return .init(
       pathExtension: "png",
       diffing: .image(precision: precision, scale: scale)
+    )
+  }
+
+  /// A snapshot strategy for comparing images based on pixel equality using HEIC.
+  public static var imageHEIC: Snapshotting {
+    return .imageHEIC(precision: 1, scale: nil, quality: 1.0)
+  }
+
+  /// A snapshot strategy for comparing images based on pixel equality.
+  ///
+  /// - Parameter precision: The percentage of pixels that must match.
+  /// - Parameter scale: The scale of the reference image stored on disk.
+  /// - Parameter quality: Compression quality: 1.0 == lossless, 0.0 == maximum compression
+  public static func imageHEIC(precision: Float, scale: CGFloat?, quality: CGFloat = 1.0) -> Snapshotting {
+    return .init(
+      pathExtension: "heic",
+      diffing: .imageHEIC(precision: precision, scale: scale, quality: quality)
     )
   }
 }
@@ -109,6 +166,36 @@ private func compare(_ old: UIImage, _ new: UIImage, precision: Float) -> Bool {
   return true
 }
 
+private func compareHEIC(_ old: UIImage, _ new: UIImage, precision: Float, quality: CGFloat) -> Bool {
+  guard let oldCgImage = old.cgImage else { return false }
+  guard let newCgImage = new.cgImage else { return false }
+  guard oldCgImage.width != 0 else { return false }
+  guard newCgImage.width != 0 else { return false }
+  guard oldCgImage.width == newCgImage.width else { return false }
+  guard oldCgImage.height != 0 else { return false }
+  guard newCgImage.height != 0 else { return false }
+  guard oldCgImage.height == newCgImage.height else { return false }
+
+  let byteCount = imageContextBytesPerPixel * oldCgImage.width * oldCgImage.height
+  var oldBytes = [UInt8](repeating: 0, count: byteCount)
+  guard let oldContext = context(for: oldCgImage, data: &oldBytes) else { return false }
+  guard let oldData = oldContext.data else { return false }
+  let newer = UIImage(data: new.heicData(quality: quality)!)!
+  guard let newerCgImage = newer.cgImage else { return false }
+  var newerBytes = [UInt8](repeating: 0, count: byteCount)
+  guard let newerContext = context(for: newerCgImage, data: &newerBytes) else { return false }
+  guard let newerData = newerContext.data else { return false }
+  if memcmp(oldData, newerData, byteCount) == 0 { return true }
+  if precision >= 1 { return false }
+  var differentPixelCount = 0
+  let threshold = 1 - precision
+  for byte in 0..<byteCount {
+    if oldBytes[byte] != newerBytes[byte] { differentPixelCount += 1 }
+    if Float(differentPixelCount) / Float(byteCount) > threshold { return false}
+  }
+  return true
+}
+
 private func context(for cgImage: CGImage, data: UnsafeMutableRawPointer? = nil) -> CGContext? {
   let bytesPerRow = cgImage.width * imageContextBytesPerPixel
   guard
@@ -122,7 +209,7 @@ private func context(for cgImage: CGImage, data: UnsafeMutableRawPointer? = nil)
       space: colorSpace,
       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     )
-    else { return nil }
+  else { return nil }
 
   context.draw(cgImage, in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height))
   return context
